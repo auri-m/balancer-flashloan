@@ -1,6 +1,6 @@
 const { expect } = require("chai")
 const hre = require("hardhat")
-const big = require('big.js')
+const IERC20 = require('@openzeppelin/contracts/build/contracts/ERC20.json')
 require("dotenv").config()
 
 describe("Balancer flashloan on polygon", () => {
@@ -10,11 +10,12 @@ describe("Balancer flashloan on polygon", () => {
   const default_decimals = 18;
 
   let owner;
+  let not_owner;
   let contract;
 
   beforeEach(async () => {
 
-    [owner] = 
+    [owner, not_owner] = 
       await hre.ethers.getSigners();
 
     const contract_factory = 
@@ -227,7 +228,123 @@ describe("Balancer flashloan on polygon", () => {
         .to.equal(rounded_original_balance)
     });
 
+    it("should be able to receive ERC20 tokens", async () => {
 
+      const dai_contract_address = "0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063";
+      const dai_wallet_to_impersonate = "0x62de034b1a69ef853c9d0d8a33d26df5cf26682e";
+      const dai_amount_to_send = ethers.utils.parseUnits("1000000", default_decimals);
+
+      await hre.network.provider.request({
+        method: "hardhat_impersonateAccount",
+        params: [dai_wallet_to_impersonate],
+      })
+
+      const impesonated_account = 
+        await ethers.getSigner(dai_wallet_to_impersonate);
+
+      const dai_contract = 
+        new ethers.Contract
+        (
+          dai_contract_address, 
+          IERC20.abi, 
+          ethers.provider
+        );
+      
+      // send 1 000 000 DAI to contract
+      await dai_contract
+          .connect(impesonated_account)
+          .transfer(
+            contract.address, 
+            dai_amount_to_send
+          );
+
+      const dai_contract_balance_1 = 
+        await contract.getTokenBalance(dai_contract_address);
+      
+      const dai_contract_balance_2 = 
+        await dai_contract.balanceOf(contract.address); 
+
+      expect(dai_contract_balance_1)
+        .to.equal(dai_amount_to_send); 
+
+      expect(dai_contract_balance_2)
+        .to.equal(dai_amount_to_send); 
+    });
+
+    it("should be able to withdraw ERC20 tokens", async () => {
+
+      const dai_contract_address = "0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063";
+      const dai_wallet_to_impersonate = "0x62de034b1a69ef853c9d0d8a33d26df5cf26682e";
+      const dai_amount_to_send = ethers.utils.parseUnits("2000000", default_decimals);
+
+      await hre.network.provider.request({
+        method: "hardhat_impersonateAccount",
+        params: [dai_wallet_to_impersonate],
+      })
+
+      const impesonated_account = 
+        await ethers.getSigner(dai_wallet_to_impersonate);
+
+      const dai_contract = 
+        new ethers.Contract
+        (
+          dai_contract_address, 
+          IERC20.abi, 
+          ethers.provider
+        );
+      
+      // send 2 000 000 DAI to contract
+      await dai_contract
+          .connect(impesonated_account)
+          .transfer(
+            contract.address, 
+            dai_amount_to_send
+          );
+
+      const dai_contract_balance = 
+        await contract.getTokenBalance(dai_contract_address);
+
+      expect(dai_contract_balance)
+        .to.equal(dai_amount_to_send); 
+
+      // withdraw to owner
+      await contract.withdrawToken(dai_contract_address);
+      
+      // contract DAI balance should be 0
+      const dai_contract_balance_after_withdrawal = 
+        await dai_contract.balanceOf(contract.address); 
+
+      expect(dai_contract_balance_after_withdrawal)
+        .to.equal(0); 
+      
+      // owner DAI balance should be 2 000 000 
+      const dai_owner_balance = 
+        await dai_contract.balanceOf(owner.address); 
+      
+      expect(dai_owner_balance)
+        .to.equal(dai_amount_to_send);
+    });
+
+    it("non owner accounts should not be allowed to witdraw native coins", async () => {
+
+      const transaction = contract
+          .connect(not_owner)
+          .withdraw();
+
+      await expect(transaction).to.be.revertedWith('caller is not the owner!');
+      
+    });
+
+    it("non owner accounts should not be allowed to witdraw tokens", async () => {
+
+      const dai_contract_address = "0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063";
+      const transaction = contract
+          .connect(not_owner)
+          .withdrawToken(dai_contract_address);
+
+      await expect(transaction).to.be.revertedWith('caller is not the owner!');
+
+    });
   });
 })
 

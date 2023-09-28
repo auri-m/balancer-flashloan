@@ -3,9 +3,25 @@
 pragma solidity 0.8.18;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "./IFlashLoanRecipient.sol";
-import "./IBalancerVault.sol";
 import "hardhat/console.sol";
+
+interface IFlashLoanRecipient {
+    function receiveFlashLoan(
+        IERC20[] memory tokens,
+        uint256[] memory amounts,
+        uint256[] memory feeAmounts,
+        bytes memory userData
+    ) external;
+}
+
+interface IBalancerVault {
+    function flashLoan(
+        IFlashLoanRecipient recipient,
+        IERC20[] memory tokens,
+        uint256[] memory amounts,
+        bytes memory userData
+    ) external;
+}
 
 contract Flashloan is IFlashLoanRecipient {
     
@@ -13,7 +29,8 @@ contract Flashloan is IFlashLoanRecipient {
     address public immutable _vault;
     string private _version = "";
 
-    modifier onlyOwner() {
+    modifier onlyOwner() 
+    {
         require(msg.sender == _owner, "caller is not the owner!");
         _;
     }
